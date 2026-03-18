@@ -4,6 +4,7 @@ import { useRef } from 'react'
 import { motion, useInView } from 'framer-motion'
 import Image from 'next/image'
 import { FiMapPin, FiMail, FiPhone, FiGithub, FiLinkedin, FiTwitter, FiGlobe } from 'react-icons/fi'
+import { SiLeetcode } from 'react-icons/si'
 
 interface SocialLink {
   name: string
@@ -17,6 +18,13 @@ const socialIconMap: Record<string, React.ComponentType<{ className?: string }>>
   FiTwitter: FiTwitter,
   FiMail: FiMail,
   FiGlobe: FiGlobe,
+  SiLeetcode: SiLeetcode,
+}
+
+function ensureHttps(url: string): string {
+  if (!url) return url
+  if (url.startsWith('http://') || url.startsWith('https://') || url.startsWith('mailto:')) return url
+  return `https://${url}`
 }
 
 interface AboutProps {
@@ -139,7 +147,7 @@ export default function About({ name, bio, avatarURL, email, phone, address, soc
                   return (
                     <motion.a
                       key={i}
-                      href={link.url}
+                      href={ensureHttps(link.url)}
                       target="_blank"
                       rel="noopener noreferrer"
                       initial={{ opacity: 0, y: 10 }}

@@ -2,6 +2,7 @@
 
 import { motion } from 'framer-motion'
 import { FiGithub, FiLinkedin, FiTwitter, FiMail, FiArrowUp, FiGlobe } from 'react-icons/fi'
+import { SiLeetcode } from 'react-icons/si'
 
 interface SocialLink {
   name: string
@@ -20,6 +21,13 @@ const iconMap: Record<string, React.ComponentType<{ className?: string }>> = {
   FiTwitter: FiTwitter,
   FiMail: FiMail,
   FiGlobe: FiGlobe,
+  SiLeetcode: SiLeetcode,
+}
+
+function ensureHttps(url: string): string {
+  if (!url) return url
+  if (url.startsWith('http://') || url.startsWith('https://') || url.startsWith('mailto:')) return url
+  return `https://${url}`
 }
 
 export default function Footer({ name, socialLinks }: FooterProps) {
@@ -38,7 +46,7 @@ export default function Footer({ name, socialLinks }: FooterProps) {
               return (
                 <motion.a
                   key={i}
-                  href={link.url}
+                  href={ensureHttps(link.url)}
                   target="_blank"
                   rel="noopener noreferrer"
                   whileHover={{ y: -3, scale: 1.1 }}
