@@ -48,14 +48,18 @@ export async function POST(req: NextRequest) {
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-    // Send email notification (non-blocking - don't fail if email fails)
+    // Send email notification
+    let emailSent = true
+    let emailError: string | null = null
     try {
       await sendContactEmail({ name, email, content })
-    } catch (emailError) {
+    } catch (err) {
+      emailSent = false
+      emailError = err instanceof Error ? err.message : String(err)
       console.error('Failed to send email notification:', emailError)
     }
 
-    return NextResponse.json(message, { status: 201 })
+    return NextResponse.json({ ...message, emailSent, emailError }, { status: 201 })
   } catch {
     return NextResponse.json({ error: 'Failed to send message' }, { status: 500 })
   }

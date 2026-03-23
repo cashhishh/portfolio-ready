@@ -1,8 +1,8 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import toast from 'react-hot-toast'
-import { FiPlus, FiEdit2, FiTrash2, FiSave, FiX } from 'react-icons/fi'
+import { FiPlus, FiEdit2, FiTrash2, FiSave, FiX, FiUpload, FiChevronUp, FiChevronDown } from 'react-icons/fi'
 
 interface LinkItem {
   name: string
@@ -34,7 +34,9 @@ export default function AdminProjects() {
   const [editing, setEditing] = useState<ProjectData | null>(null)
   const [isNew, setIsNew] = useState(false)
   const [newTech, setNewTech] = useState('')
-  const [newImage, setNewImage] = useState('')
+  const [uploadingImages, setUploadingImages] = useState(false)
+  const [savingOrder, setSavingOrder] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   const fetchAll = async () => {
     const res = await fetch('/api/projects')
@@ -86,6 +88,53 @@ export default function AdminProjects() {
   function removeLink(index: number) {
     if (!editing) return
     setEditing({ ...editing, links: editing.links.filter((_, i) => i !== index) })
+  }
+
+  async function moveItem(index: number, direction: 'up' | 'down') {
+    const newItems = [...items]
+    const swapIndex = direction === 'up' ? index - 1 : index + 1
+    if (swapIndex < 0 || swapIndex >= newItems.length) return
+    ;[newItems[index], newItems[swapIndex]] = [newItems[swapIndex], newItems[index]]
+    setItems(newItems)
+    setSavingOrder(true)
+    try {
+      await Promise.all(
+        newItems.map((item, i) =>
+          fetch('/api/projects', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ...item, order: i }),
+          })
+        )
+      )
+      toast.success('Order saved!')
+    } catch {
+      toast.error('Failed to save order')
+    }
+    setSavingOrder(false)
+  }
+
+  async function handleImageUpload(files: FileList | null) {
+    if (!files || files.length === 0 || !editing) return
+    setUploadingImages(true)
+    const uploaded: string[] = []
+    for (const file of Array.from(files)) {
+      const fd = new FormData()
+      fd.append('file', file)
+      const res = await fetch('/api/upload', { method: 'POST', body: fd })
+      if (res.ok) {
+        const { url } = await res.json()
+        uploaded.push(url)
+      } else {
+        const { error } = await res.json()
+        toast.error(error || 'Upload failed')
+      }
+    }
+    if (uploaded.length > 0) {
+      setEditing({ ...editing, images: [...editing.images, ...uploaded] })
+      toast.success(`${uploaded.length} image${uploaded.length > 1 ? 's' : ''} uploaded!`)
+    }
+    setUploadingImages(false)
   }
 
   const inputClass = 'w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder:text-white/30 focus:outline-none focus:border-white/20 transition-colors'
@@ -174,29 +223,73 @@ export default function AdminProjects() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
             <div>
               <label className={labelClass}>GitHub URL (optional)</label>
-              <input className={inputClass} value={editing.githubURL} onChange={e => setEditing({ ...editing, githubURL: e.target.value })} placeholder="https://github.com/..." />
+              <div className="relative">
+                <input className={`${inputClass} pr-10`} value={editing.githubURL} onChange={e => setEditing({ ...editing, githubURL: e.target.value })} placeholder="https://github.com/..." />
+                {editing.githubURL && (
+                  <button onClick={() => setEditing({ ...editing, githubURL: '' })} className="absolute right-3 top-1/2 -translate-y-1/2 text-white/30 hover:text-red-400 transition-colors">
+                    <FiX className="w-4 h-4" />
+                  </button>
+                )}
+              </div>
             </div>
             <div>
               <label className={labelClass}>Video URL (optional)</label>
-              <input className={inputClass} value={editing.videoURL} onChange={e => setEditing({ ...editing, videoURL: e.target.value })} placeholder="https://youtube.com/..." />
+              <div className="relative">
+                <input className={`${inputClass} pr-10`} value={editing.videoURL} onChange={e => setEditing({ ...editing, videoURL: e.target.value })} placeholder="https://youtube.com/..." />
+                {editing.videoURL && (
+                  <button onClick={() => setEditing({ ...editing, videoURL: '' })} className="absolute right-3 top-1/2 -translate-y-1/2 text-white/30 hover:text-red-400 transition-colors">
+                    <FiX className="w-4 h-4" />
+                  </button>
+                )}
+              </div>
             </div>
           </div>
 
           {/* Images */}
           <div>
-            <label className={labelClass}>Image URLs</label>
-            <div className="flex gap-2 flex-wrap mb-2">
-              {editing.images.map((img, i) => (
-                <span key={i} className="flex items-center gap-1 px-3 py-1.5 bg-white/10 text-white text-xs rounded-lg max-w-xs truncate">
-                  {img}
-                  <button onClick={() => setEditing({ ...editing, images: editing.images.filter((_, idx) => idx !== i) })} className="text-white/40 hover:text-white ml-1"><FiX className="w-3 h-3" /></button>
-                </span>
-              ))}
-            </div>
-            <div className="flex gap-2">
-              <input className={inputClass} value={newImage} onChange={e => setNewImage(e.target.value)} placeholder="https://..." onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); if (newImage.trim()) { setEditing({ ...editing, images: [...editing.images, newImage.trim()] }); setNewImage('') } } }} />
-              <button onClick={() => { if (newImage.trim()) { setEditing({ ...editing, images: [...editing.images, newImage.trim()] }); setNewImage('') } }} className="px-4 py-3 bg-white/10 text-white rounded-xl hover:bg-white/15 transition-colors"><FiPlus /></button>
-            </div>
+            <label className={labelClass}>Project Images</label>
+
+            {/* Thumbnails */}
+            {editing.images.length > 0 && (
+              <div className="flex gap-3 flex-wrap mb-3">
+                {editing.images.map((img, i) => (
+                  <div key={i} className="relative group/img">
+                    <img
+                      src={img}
+                      alt={`Image ${i + 1}`}
+                      className="w-24 h-24 object-cover rounded-xl border border-white/10"
+                      onError={e => { (e.target as HTMLImageElement).style.opacity = '0.3' }}
+                    />
+                    <button
+                      onClick={() => setEditing({ ...editing, images: editing.images.filter((_, idx) => idx !== i) })}
+                      className="absolute -top-2 -right-2 w-5 h-5 bg-red-500 rounded-full flex items-center justify-center opacity-0 group-hover/img:opacity-100 transition-opacity"
+                    >
+                      <FiX className="w-3 h-3 text-white" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Upload button */}
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              multiple
+              className="hidden"
+              onChange={e => handleImageUpload(e.target.files)}
+            />
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={uploadingImages}
+              className="flex items-center gap-2 px-4 py-3 w-full justify-center border border-dashed border-white/20 rounded-xl text-white/50 hover:border-white/40 hover:text-white/80 hover:bg-white/5 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              <FiUpload className="w-4 h-4" />
+              {uploadingImages ? 'Uploading...' : 'Click to upload images (or select multiple)'}
+            </button>
+            <p className="text-white/20 text-xs mt-1.5">PNG, JPG, WEBP — max 5MB each. Multiple images allowed.</p>
           </div>
 
           <div className="flex items-center gap-3">
@@ -214,9 +307,25 @@ export default function AdminProjects() {
 
       {/* List */}
       <div className="space-y-3">
-        {items.map((item) => (
+        {items.map((item, index) => (
           <div key={item.id} className="p-5 rounded-2xl bg-white/3 border border-white/6 flex items-center justify-between group hover:border-white/10 transition-colors">
-            <div>
+            {/* Rank + drag handle */}
+            <div className="flex items-center gap-3 mr-4 shrink-0">
+              <span className="text-white/20 text-xs font-mono w-4 text-center">{index + 1}</span>
+              <div className="flex flex-col gap-0.5">
+                <button
+                  onClick={() => moveItem(index, 'up')}
+                  disabled={index === 0 || savingOrder}
+                  className="p-0.5 text-white/20 hover:text-white disabled:opacity-0 transition-colors"
+                ><FiChevronUp className="w-3.5 h-3.5" /></button>
+                <button
+                  onClick={() => moveItem(index, 'down')}
+                  disabled={index === items.length - 1 || savingOrder}
+                  className="p-0.5 text-white/20 hover:text-white disabled:opacity-0 transition-colors"
+                ><FiChevronDown className="w-3.5 h-3.5" /></button>
+              </div>
+            </div>
+            <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2">
                 <h3 className="text-white font-medium">{item.name}</h3>
                 {item.featured && <span className="px-2 py-0.5 text-xs bg-amber-500/20 text-amber-400 rounded-full">Featured</span>}
@@ -228,7 +337,7 @@ export default function AdminProjects() {
                 ))}
               </div>
             </div>
-            <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+            <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity ml-3 shrink-0">
               <button onClick={() => { setEditing(item); setIsNew(false) }} className="p-2 text-white/40 hover:text-white transition-colors"><FiEdit2 className="w-4 h-4" /></button>
               <button onClick={() => handleDelete(item.id!)} className="p-2 text-white/40 hover:text-red-400 transition-colors"><FiTrash2 className="w-4 h-4" /></button>
             </div>

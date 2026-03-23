@@ -11,7 +11,7 @@ export async function sendContactEmail({
   email: string
   content: string
 }) {
-  await resend.emails.send({
+  const { data, error } = await resend.emails.send({
     from: 'Portfolio <onboarding@resend.dev>',
     to: process.env.EMAIL_TO!,
     subject: `New message from ${name}`,
@@ -26,4 +26,12 @@ export async function sendContactEmail({
       </div>
     `,
   })
+
+  if (error) {
+    console.error('Resend API error:', JSON.stringify(error))
+    throw new Error(error.message)
+  }
+
+  console.log('Email sent successfully, id:', data?.id)
+  return data
 }
